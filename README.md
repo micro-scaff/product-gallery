@@ -1,2 +1,1 @@
-# product-gallery
-商品预览
+# 商品预览
