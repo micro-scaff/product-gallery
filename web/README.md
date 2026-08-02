@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Product Gallery Web 端说明
 
-## Getting Started
+Web 端负责管理后台和 C 端页面实现，业务范围以根目录 [OVERVIEW.md](../OVERVIEW.md) 为准，实施拆分以 [IMPLEMENTATION.md](../IMPLEMENTATION.md) 为准。
 
-First, run the development server:
+## 技术栈
+
+- Next.js `16.2.12`
+- React `19.2.4`
+- TypeScript
+- Tailwind CSS `4`
+
+## 开发命令
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 页面范围
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 管理后台
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 页面 | 首期路由 | 首期能力 |
+| --- | --- | --- |
+| 登录页 | `/admin/login` | 管理员登录。 |
+| 商品列表 | `/admin/products` | 查询、筛选、创建、上下架和进入编辑。 |
+| 商品编辑 | `/admin/products/{id}` | 基础字段、Markdown 编辑/预览、文档转换、聊天配置。 |
+| 管理员管理 | `/admin/admins` | 普通管理员创建、禁用、编辑和重置密码。 |
+| 用户管理 | `/admin/users` | 用户查询、详情、启用/禁用、重置密码。 |
+| 聊天工作台 | `/admin/chats` | 会话列表、消息详情、实时接收和回复，兼容手机浏览器。 |
+| 系统设置 | `/admin/settings` | 系统级聊天开关。 |
 
-## Learn More
+### C 端
 
-To learn more about Next.js, take a look at the following resources:
+| 页面 | 首期路由 | 首期能力 |
+| --- | --- | --- |
+| 商品列表 | `/products` | 展示已上架商品，兼容 PC 和手机。 |
+| 商品详情 | `/products/{id}` | 展示 Markdown 详情、价格、封面和聊天入口。 |
+| 登录页/弹窗 | `/login` | 手机号、密码和图形验证码登录。 |
+| 个人中心 | `/profile` | 查看和修改头像、手机号、密码。 |
+| 聊天入口 | 浮层 | 创建或复用商品咨询会话，连接 Flow Talk。 |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 前端实现约定
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- 管理后台接口统一调用 `/api/admin/*`，C 端接口统一调用 `/api/client/*`。
+- 列表接口使用 `page`、`page_size` 分页参数，并消费 `items`、`total`、`page`、`page_size` 返回结构。
+- 接口成功响应按 `{ "data": ... }` 处理；失败响应按 `{ "error": { "code": "...", "message": "..." } }` 处理。
+- 后台权限不能只靠隐藏按钮，前端隐藏入口只作为体验优化，最终权限以后端返回为准。
+- C 端首次访问时使用 FingerprintJS 生成设备 ID，并在游客聊天、登录合并等请求中提交给后端。
+- 商品详情渲染 Markdown 时，需要配合后端过滤后的安全内容展示。
+- 上传头像、商品封面和文档转换文件时，前端只保存接口返回的静态资源 URL，不拼接服务器绝对路径。
 
-## Deploy on Vercel
+## 聊天联调要求
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 管理员能够分别在 PC 和手机浏览器中打开聊天工作台并正常切换会话。
+- C 端发送新消息后，管理员界面无需手动刷新即可收到消息和未读提示。
+- 管理员从手机端回复后，C 端能够实时收到消息，且双方刷新页面后仍能查看历史记录。
+- 超级管理员和普通管理员只能查看、回复各自权限范围内的会话。
