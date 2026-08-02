@@ -5,19 +5,62 @@ Server 端负责业务接口、权限校验、数据持久化、上传文件管�
 ## 技术栈
 
 - Go `1.25.4`
+- Gin
+- MySQL
 - HTTP API 前缀统一使用 `/api`
 - 管理后台接口放在 `/api/admin`
 - C 端接口放在 `/api/client`
 
+后端代码参考 `https://github.com/Not-have/demo-go/tree/main/demo-gin-mvc-verification-code` 的轻量 Gin MVC 结构：`main.go` 初始化 Gin，`routers` 注册路由，`controllers` 处理 HTTP 请求，`models` 放数据模型，`middlewares` 放中间件。当前项目在此基础上增加 `services` 和 `utils`，让业务逻辑更清楚。
+
+## 本地数据库
+
+```ini
+host = 127.0.0.1
+port = 3306
+username = root
+password = admin
+database = product_gallery
+```
+
 ## 后端实现约定
 
-- 所有后台接口必须校验登录态和服务端权限，不能依赖前端隐藏按钮。
+- 首期以前端控制页面入口、按钮展示、表单校验和业务流程为主，后端不需要对所有接口做完整权限验证。
+- 后端需要保留基础校验：登录接口校验账号状态和密码，关键写操作校验必要参数，涉及商品归属、用户禁用、会话接待方等核心数据时做最低限度的数据约束。
 - 业务对象使用服务端生成的稳定 ID 建立关系，不能用手机号、标题、昵称等可变字段作为关联主键。
 - 时间字段统一保存服务端时间，并在接口中返回 ISO 8601 字符串。
 - 列表接口默认支持分页，分页参数采用 `page`、`page_size`，返回 `items`、`total`、`page`、`page_size`。
 - 接口成功响应统一为 `{ "data": ... }`，失败响应统一为 `{ "error": { "code": "...", "message": "..." } }`。
 - 删除商品、管理员和用户优先采用状态变更或软删除；存在业务历史的数据不得物理删除。
 - 超级管理员、普通管理员和 C 端用户密码均按业务要求以明文保存和校验。
+- 代码需要添加清晰、详细且有助于阅读的注释，尤其是路由注册、请求解析、数据库访问、上传文件保存、验证码和 Flow Talk 换票逻辑。
+
+## 建议目录结构
+
+```text
+server/
+  main.go
+  conf/
+  routers/
+  controllers/
+  models/
+  services/
+  middlewares/
+  utils/
+  static/
+```
+
+目录职责：
+
+- `main.go` 创建 Gin 实例，加载配置，注册路由，启动服务。
+- `conf` 保存本地配置，包含数据库、端口、Flow Talk 等。
+- `routers` 只注册路由，不写业务逻辑。
+- `controllers` 接收参数、调用 service、返回统一 JSON。
+- `models` 定义数据结构和数据库字段映射。
+- `services` 承载商品、用户、游客设备、上传、聊天绑定和 Flow Talk 换票等业务逻辑。
+- `middlewares` 放 CORS、请求日志、基础登录态等中间件。
+- `utils` 放验证码、文件名处理、响应封装等通用工具。
+- `static` 存放上传文件。
 
 ## 上传文件存储
 
@@ -84,7 +127,7 @@ server/static/{file_type}/{file_name}-{user_id}
 | POST | `/api/admin/chats/{id}/read` | 标记会话已读 | 管理员 |
 | POST | `/api/admin/flow-talk/token` | 为当前管理员换取 Flow Talk 外部身份 Token | 管理员 |
 
-普通管理员调用商品、用户和聊天接口时，服务端必须按角色权限过滤数据。
+普通管理员的页面入口、按钮和主要交互由前端按角色权限控制。后端对列表类接口不要求逐接口完整鉴权，但对商品负责人变更、管理员禁用、用户禁用、会话转交等关键写操作需要做基础约束，避免明显错误数据写入。
 
 ## C 端接口
 
