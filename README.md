@@ -15,3 +15,35 @@ Product Gallery 是一个商品展示与咨询系统，包含管理后台、C �
 - 前端使用 Next.js + Ant Design，UI 风格遵循 `$frontend-skill`。
 - 数据库使用本地 MySQL：`127.0.0.1:3306/product_gallery`。
 - 前端尽量承担交互、校验和权限入口控制，后端保持简洁，仅做必要基础校验。
+
+## 本地启动
+
+本地端口约定：
+
+| 服务 | 默认端口 | 说明 |
+| --- | --- | --- |
+| Web 前端 | `3000` | Next.js 页面服务。 |
+| Product Gallery Server | `18080` | Go 业务接口服务，可用 `APP_PORT` 覆盖。 |
+| Flow Talk Server | `8080` | 本地聊天通讯服务，Product Gallery 不占用此端口。 |
+
+后端：
+
+```bash
+cd server
+go mod tidy
+go run .
+```
+
+前端：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+如需显式指定后端地址：
+
+```bash
+NEXT_PUBLIC_API_BASE=http://localhost:18080 npm run dev
+```

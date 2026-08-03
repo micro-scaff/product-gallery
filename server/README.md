@@ -23,6 +23,104 @@ password = admin
 database = product_gallery
 ```
 
+## 开发命令
+
+```bash
+go mod tidy
+go run .
+```
+
+默认启动端口为 `18080`。本机 `8080` 预留给 `flow-talk-server` 聊天通讯服务，避免业务后端与通讯服务端口冲突。
+
+如需临时切换端口：
+
+```bash
+APP_PORT=18081 go run .
+```
+
+## Fresh 启动方式
+
+适合第一次拉项目、清空本地缓存后重启、或联调环境想重新确认链路时使用。
+
+1. 确认 MySQL 已启动，并创建本地数据库：
+
+```sql
+CREATE DATABASE IF NOT EXISTS product_gallery
+  DEFAULT CHARACTER SET utf8mb4
+  DEFAULT COLLATE utf8mb4_unicode_ci;
+```
+
+2. 确认配置文件存在：`server/conf/app.ini`。
+
+```ini
+[app]
+port = 18080
+
+[database]
+host = 127.0.0.1
+port = 3306
+username = root
+password = admin
+database = product_gallery
+
+[flow_talk]
+provider = demo
+base_url = http://127.0.0.1:8080
+demo_peer_access_token = product-gallery-demo-client
+```
+
+3. 清理本地构建缓存并重新拉取依赖：
+
+```bash
+cd server
+go clean -cache -modcache
+go mod tidy
+```
+
+4. 先启动本地 Flow Talk 通讯服务，保持 `8080` 端口可用：
+
+```bash
+cd /Users/liyong/Desktop/code/flow-talk/flow-talk-server
+go run .
+```
+
+5. 启动 Product Gallery 后端：
+
+```bash
+cd /Users/liyong/Desktop/code/product-gallery/server
+go run .
+```
+
+6. 验证后端健康检查：
+
+```bash
+curl http://127.0.0.1:18080/health
+```
+
+期望返回：
+
+```json
+{"data":{"status":"ok"}}
+```
+
+启动后会自动执行 GORM `AutoMigrate`，并初始化默认超级管理员：
+
+```text
+username: admin
+password: product-gallery
+```
+
+本地配置文件位于 `server/conf/app.ini`。临时 Flow Talk 联调方案使用：
+
+```ini
+[flow_talk]
+provider = demo
+base_url = http://127.0.0.1:8080
+demo_peer_access_token = product-gallery-demo-client
+```
+
+其中 `provider = demo` 对应当前 `flow-talk-server` 内置的本地 demo provider，用于快速跑通外部登录、单聊、发送消息和历史消息读取。
+
 ## 后端实现约定
 
 - 首期以前端控制页面入口、按钮展示、表单校验和业务流程为主，后端不需要对所有接口做完整权限验证。
@@ -153,7 +251,7 @@ server/static/{file_type}/{file_name}-{user_id}
 
 - Product Gallery 是业务身份源，Flow Talk 只负责 IM 身份和消息能力。
 - Product Gallery 服务端签发短期外部身份 Token。
-- 客户端调用 Flow Talk `POST /api/auth/external`，提交 `provider = product_gallery` 和外部 Token。
+- 临时联调阶段，客户端调用 Flow Talk `POST /api/auth/external`，提交 `provider = demo` 和 Product Gallery 换票接口返回的稳定外部 Token。
 - 后续聊天 HTTP API 和 WebSocket 只使用 Flow Talk JWT。
 - Product Gallery 密码不得提交给 Flow Talk。
 - 用户、管理员被禁用后，必须阻止继续换票；已签发的 Flow Talk JWT 不续期，过期后自然失效。
