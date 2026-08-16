@@ -97,7 +97,7 @@ export default function ProductDetailPage({
           title="商品不存在或未上架"
           subTitle="请返回商品列表选择一个真实的已上架商品。"
           extra={
-            <Link href="/products">
+            <Link href="/">
               <Button type="primary">返回商品列表</Button>
             </Link>
           }
@@ -313,7 +313,7 @@ export default function ProductDetailPage({
       />
       <section className="detail-pane">
         <div className="detail-hero-copy">
-          <Link href="/products" className="back-link">
+          <Link href="/" className="back-link">
             <ArrowLeftOutlined /> 返回商品列表
           </Link>
           <Typography.Text className="eyebrow">Product Detail</Typography.Text>

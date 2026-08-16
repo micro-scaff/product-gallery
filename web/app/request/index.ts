@@ -91,8 +91,11 @@ export async function request<T>(
   const payload = (await response.json().catch(() => ({}))) as ApiEnvelope<T>;
 
   if (!response.ok || payload.error) {
-    if (response.status === 401 && path.startsWith("/api/admin")) {
+    if (shouldReturnClientHome(path, response.status)) {
       clearStoredAdminAuth();
+      if (typeof window !== "undefined" && window.location.pathname !== "/") {
+        window.location.replace("/");
+      }
     }
     throw new RequestError(
       payload.error?.message ?? "请求失败",
@@ -102,4 +105,13 @@ export async function request<T>(
   }
 
   return payload.data as T;
+}
+
+function shouldReturnClientHome(path: string, status: number) {
+  if (status !== 401 || !path.startsWith("/api/admin")) {
+    return false;
+  }
+  // Keep the explicit login form usable: wrong username/password should show
+  // the form error instead of bouncing the user back to the C-end homepage.
+  return path !== "/api/admin/auth/login";
 }

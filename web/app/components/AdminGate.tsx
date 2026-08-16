@@ -36,7 +36,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setAuth(null);
           setReady(true);
-          router.replace("/admin/login");
+          router.replace("/");
         }
         return;
       }
@@ -52,7 +52,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
           clearStoredAdminAuth();
           setAuth(null);
           setReady(true);
-          router.replace("/admin/login");
+          router.replace("/");
         }
       }
     }
