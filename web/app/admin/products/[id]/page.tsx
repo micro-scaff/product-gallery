@@ -1,4 +1,5 @@
 import { AdminGate } from "../../../components/AdminGate";
+import { AdminWorkspaceShell } from "../../../components/AdminWorkspaceShell";
 import AdminProductDetailPage from "../../../pages/AdminProductDetailPage";
 import type { Product } from "../../../api/types";
 import { serverRequest } from "../../../request/server";
@@ -15,7 +16,9 @@ export default async function AdminProductDetailRoute({
   const product = await serverRequest<Product>(`/api/admin/products/${id}`);
   return (
     <AdminGate>
-      <AdminProductDetailPage productId={id} initialProduct={product ?? undefined} />
+      <AdminWorkspaceShell>
+        <AdminProductDetailPage productId={id} initialProduct={product ?? undefined} />
+      </AdminWorkspaceShell>
     </AdminGate>
   );
 }

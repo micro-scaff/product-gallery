@@ -5,9 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import type { AdminRole } from "../api";
+import { authApi, type AdminRole } from "../api";
 import {
   canAccessAdminPath,
+  clearStoredAdminAuth,
   getStoredAdminAuth,
   type StoredAdminAuth,
 } from "../request/session";
@@ -24,13 +25,43 @@ export function AdminGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     // The guard must read browser-only localStorage after hydration before it
     // can decide whether to render protected admin content or redirect.
-    const storedAuth = getStoredAdminAuth();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAuth(storedAuth);
-    setReady(true);
-    if (!storedAuth) {
-      router.replace("/admin/login");
+    let cancelled = false;
+
+    async function verifyStoredSession() {
+      // Move localStorage reads and state updates out of the synchronous effect
+      // body so React's set-state-in-effect rule stays happy.
+      await Promise.resolve();
+      const storedAuth = getStoredAdminAuth();
+      if (!storedAuth) {
+        if (!cancelled) {
+          setAuth(null);
+          setReady(true);
+          router.replace("/admin/login");
+        }
+        return;
+      }
+
+      try {
+        await authApi.adminMe();
+        if (!cancelled) {
+          setAuth(storedAuth);
+          setReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          clearStoredAdminAuth();
+          setAuth(null);
+          setReady(true);
+          router.replace("/admin/login");
+        }
+      }
     }
+
+    void verifyStoredSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   if (!ready) {

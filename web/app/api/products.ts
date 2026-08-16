@@ -1,5 +1,15 @@
 import { buildQuery, request } from "../request";
-import type { ChatBinding, PageResult, Product, ProductPayload } from "./types";
+import type {
+  ChatBinding,
+  PageResult,
+  Product,
+  ProductChatMessageResult,
+  ProductPayload,
+} from "./types";
+
+type MutationResult = {
+  ok: boolean;
+};
 
 // clientProductsApi powers the default C-end product routes.
 export const clientProductsApi = {
@@ -21,6 +31,18 @@ export const clientProductsApi = {
     return request<ChatBinding>(`/api/client/products/${productId}/chat`, {
       method: "POST",
       body: JSON.stringify({ visitor_device_id: visitorDeviceId }),
+    });
+  },
+
+  // Send a C-end popup message through Product Gallery into Flow Talk so the
+  // B-end conversation workspace can read the same message stream.
+  sendChatMessage(productId: string, visitorDeviceId: string, text: string) {
+    return request<ProductChatMessageResult>(`/api/client/products/${productId}/chat/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        visitor_device_id: visitorDeviceId,
+        text,
+      }),
     });
   },
 };
@@ -55,14 +77,14 @@ export const adminProductsApi = {
 
   // Make the product visible to C-end visitors.
   publish(id: string) {
-    return request<Product>(`/api/admin/products/${id}/publish`, {
+    return request<MutationResult>(`/api/admin/products/${id}/publish`, {
       method: "POST",
     });
   },
 
   // Hide the product without deleting its history.
   offline(id: string) {
-    return request<Product>(`/api/admin/products/${id}/offline`, {
+    return request<MutationResult>(`/api/admin/products/${id}/offline`, {
       method: "POST",
     });
   },

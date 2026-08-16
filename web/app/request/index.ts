@@ -1,4 +1,4 @@
-import { getStoredAdminSession } from "./session";
+import { clearStoredAdminAuth, getStoredAdminSession } from "./session";
 
 export type ApiEnvelope<T> = {
   data?: T;
@@ -14,6 +14,11 @@ export type RequestOptions = RequestInit & {
    * Keep this enabled for normal API calls; disable only for absolute URLs.
    */
   withBaseUrl?: boolean;
+  /**
+   * Some C-end endpoints intentionally run as anonymous visitor requests even
+   * when the same browser has an admin login stored in localStorage.
+   */
+  skipAuth?: boolean;
 };
 
 export class RequestError extends Error {
@@ -40,7 +45,7 @@ function resolveUrl(path: string, withBaseUrl = true) {
 }
 
 // normalizeHeaders centralizes JSON defaults and admin Bearer token injection.
-function normalizeHeaders(init?: RequestInit) {
+function normalizeHeaders(init?: RequestInit, skipAuth = false) {
   const headers = new Headers(init?.headers);
   const adminSession = getStoredAdminSession();
 
@@ -48,7 +53,7 @@ function normalizeHeaders(init?: RequestInit) {
   if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (adminSession?.token && !headers.has("Authorization")) {
+  if (!skipAuth && adminSession?.token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${adminSession.token}`);
   }
 
@@ -70,14 +75,14 @@ export function buildQuery(params: Record<string, string | number | undefined>) 
 // local auth injection, network errors and the agreed { data | error } envelope.
 export async function request<T>(
   path: string,
-  { withBaseUrl = true, ...init }: RequestOptions = {},
+  { withBaseUrl = true, skipAuth = false, ...init }: RequestOptions = {},
 ): Promise<T> {
   let response: Response;
 
   try {
     response = await fetch(resolveUrl(path, withBaseUrl), {
       ...init,
-      headers: normalizeHeaders(init),
+      headers: normalizeHeaders(init, skipAuth),
     });
   } catch {
     throw new RequestError("网络连接失败，请确认服务是否已启动", "NETWORK_ERROR");
@@ -86,6 +91,9 @@ export async function request<T>(
   const payload = (await response.json().catch(() => ({}))) as ApiEnvelope<T>;
 
   if (!response.ok || payload.error) {
+    if (response.status === 401 && path.startsWith("/api/admin")) {
+      clearStoredAdminAuth();
+    }
     throw new RequestError(
       payload.error?.message ?? "请求失败",
       payload.error?.code ?? "HTTP_ERROR",

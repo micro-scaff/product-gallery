@@ -79,3 +79,12 @@ func (s *ChatService) CreateOrReuse(product models.Product, visitorDeviceID stri
 func (s *ChatService) Transfer(id string, receiverAdminID string) error {
 	return s.db.Model(&models.ChatBinding{}).Where("id = ?", id).Update("receiver_admin_id", receiverAdminID).Error
 }
+
+// AttachFlowTalkConversation stores the real Flow Talk conversation id after
+// the temporary local bridge creates a direct conversation and sends a message.
+func (s *ChatService) AttachFlowTalkConversation(id string, conversationID string) error {
+	return s.db.Model(&models.ChatBinding{}).Where("id = ?", id).Updates(map[string]any{
+		"flow_talk_conversation_id": conversationID,
+		"last_message_at":           time.Now(),
+	}).Error
+}

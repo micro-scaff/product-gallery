@@ -4,6 +4,7 @@ import {
   App,
   Badge,
   Button,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -14,38 +15,41 @@ import {
   Typography,
   Upload,
 } from "antd";
-import { ArrowRightOutlined, CloudUploadOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  ArrowRightOutlined,
+  CheckCircleOutlined,
+  CloudUploadOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import Link from "next/link";
 import { useState } from "react";
 import { MarkdownEditorField } from "../components/MarkdownEditorField";
 import { adminProductsApi, type Product, type ProductPayload } from "../api";
 import { money } from "./format";
-import { sampleProducts } from "./mock";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 // AdminProductsPage is intentionally list-first. Detail editing lives on
 // /admin/products/[id] so every module has a clear route boundary.
 export default function AdminProductsPage({
-  initialProducts = sampleProducts,
+  initialProducts = [],
 }: {
   initialProducts?: Product[];
 }) {
   const { message } = App.useApp();
-  const [products, setProducts] = useState<Product[]>(
-    initialProducts.length > 0 ? initialProducts : sampleProducts,
-  );
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [open, setOpen] = useState(false);
+  const [statusChangingId, setStatusChangingId] = useState<string>();
   const [form] = Form.useForm<ProductPayload>();
 
   async function refresh() {
     try {
       const page = await adminProductsApi.list();
-      // Empty results keep sample data visible so the UI still demonstrates
-      // layout on a fresh database.
-      setProducts(page.items.length > 0 ? page.items : sampleProducts);
+      setProducts(page.items);
     } catch {
-      message.info("后端未启动，商品管理展示本地示例数据。");
+      message.info("后端未启动，暂无商品数据。");
     }
   }
 
@@ -63,6 +67,27 @@ export default function AdminProductsPage({
       form.resetFields();
     } catch {
       message.error("创建失败，请确认后端服务已启动。");
+    }
+  }
+
+  // changeProductStatus is the bridge between management and the C-end list:
+  // only products marked as "published" are returned by /api/client/products.
+  async function changeProductStatus(product: Product, status: "published" | "offline") {
+    setStatusChangingId(product.id);
+    try {
+      if (status === "published") {
+        await adminProductsApi.publish(product.id);
+      } else {
+        await adminProductsApi.offline(product.id);
+      }
+      setProducts((prev) =>
+        prev.map((item) => (item.id === product.id ? { ...item, status } : item)),
+      );
+      message.success(status === "published" ? "商品已上架，C 端可见" : "商品已下架，C 端不可见");
+    } catch {
+      message.error("状态更新失败，请确认后端服务已启动。");
+    } finally {
+      setStatusChangingId(undefined);
     }
   }
 
@@ -89,11 +114,34 @@ export default function AdminProductsPage({
     },
     {
       title: "操作",
-      width: 120,
+      width: 220,
       render: (_, record) => (
-        <Link href={`/admin/products/${record.id}`} className="row-link">
-          详情 <ArrowRightOutlined />
-        </Link>
+        <Space>
+          {record.status === "published" ? (
+            <Button
+              danger
+              size="small"
+              icon={<StopOutlined />}
+              loading={statusChangingId === record.id}
+              onClick={() => void changeProductStatus(record, "offline")}
+            >
+              下架
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              loading={statusChangingId === record.id}
+              onClick={() => void changeProductStatus(record, "published")}
+            >
+              上架
+            </Button>
+          )}
+          <Link href={`/admin/products/${record.id}`} className="row-link">
+            详情 <ArrowRightOutlined />
+          </Link>
+        </Space>
       ),
     },
   ];
@@ -122,6 +170,7 @@ export default function AdminProductsPage({
           columns={productColumns}
           dataSource={products}
           pagination={false}
+          locale={{ emptyText: <Empty description="暂无商品" /> }}
         />
       </section>
       <Modal

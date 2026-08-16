@@ -1,30 +1,26 @@
 "use client";
 
-import { App, Button, List, Space, Tag, Typography } from "antd";
+import { App, Button, Empty, Space, Tag, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { type User, usersApi } from "../api";
-import { sampleUsers } from "./mock";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 // AdminUsersPage lists C-end users and exposes a simple enable/disable action.
 export default function AdminUsersPage({
-  initialUsers = sampleUsers,
+  initialUsers = [],
 }: {
   initialUsers?: User[];
 }) {
   const { message } = App.useApp();
-  const [users, setUsers] = useState<User[]>(
-    initialUsers.length > 0 ? initialUsers : sampleUsers,
-  );
+  const [users, setUsers] = useState<User[]>(initialUsers);
 
   async function refresh() {
     try {
       const page = await usersApi.list();
-      // Keep samples visible if the local database is still empty.
-      setUsers(page.items.length > 0 ? page.items : sampleUsers);
+      setUsers(page.items);
     } catch {
-      message.info("后端未启动，用户管理展示本地示例数据。");
+      message.info("后端未启动，暂无用户数据。");
     }
   }
 
@@ -56,24 +52,28 @@ export default function AdminUsersPage({
       />
       <section className="table-panel">
         <Typography.Title level={5}>C 端用户</Typography.Title>
-        <List
-          dataSource={users}
-          renderItem={(item) => (
-            <List.Item
-              actions={[
-                <Button key="status" size="small" onClick={() => void toggleStatus(item)}>
-                  {item.status === "active" ? "禁用" : "启用"}
-                </Button>,
-              ]}
-            >
-              <List.Item.Meta
-                title={item.phone}
-                description={`${item.id} · 最近登录：${item.last_login_at ?? "暂无"}`}
-              />
-              <Tag>{item.status}</Tag>
-            </List.Item>
-          )}
-        />
+        {users.length === 0 ? (
+          <Empty description="暂无用户" />
+        ) : (
+          <ul className="plain-list">
+            {users.map((item) => (
+              <li key={item.id} className="entity-row">
+                <div className="entity-copy">
+                  <Typography.Text strong>{item.phone}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {item.id} · 最近登录：{item.last_login_at ?? "暂无"}
+                  </Typography.Text>
+                </div>
+                <div className="entity-actions">
+                  <Tag>{item.status}</Tag>
+                  <Button size="small" onClick={() => void toggleStatus(item)}>
+                    {item.status === "active" ? "禁用" : "启用"}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   );

@@ -78,6 +78,12 @@ export type ChatBinding = {
   last_message_at?: string;
 };
 
+export type ProductChatMessageResult = {
+  chat: ChatBinding;
+  message: FlowTalkMessage;
+  flow_talk_conversation_id: string;
+};
+
 // ChatSetting stores the global chat policy row.
 export type ChatSetting = {
   key: string;

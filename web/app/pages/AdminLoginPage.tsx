@@ -51,7 +51,7 @@ export default function AdminLoginPage() {
         <Typography.Text className="eyebrow">Admin</Typography.Text>
         <Typography.Title level={1}>管理端登录</Typography.Title>
         <Typography.Paragraph>
-          默认只展示 C 端内容；登录后按管理员角色展示可用模块。
+          未登录时不展示后台模块；登录后按管理员角色展示可用入口。
         </Typography.Paragraph>
         <Form<LoginForm>
           layout="vertical"

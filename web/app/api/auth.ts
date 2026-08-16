@@ -36,4 +36,14 @@ export const authApi = {
       method: "POST",
     });
   },
+
+  // Anonymous C-end visitors use a stable device id to map into Flow Talk's
+  // demo provider during local联调.
+  clientFlowTalkToken(visitorDeviceId: string) {
+    return request<FlowTalkToken>("/api/client/flow-talk/token", {
+      method: "POST",
+      skipAuth: true,
+      body: JSON.stringify({ visitor_device_id: visitorDeviceId }),
+    });
+  },
 };

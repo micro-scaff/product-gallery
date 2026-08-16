@@ -1,4 +1,5 @@
 import { AdminGate } from "../../components/AdminGate";
+import { AdminWorkspaceShell } from "../../components/AdminWorkspaceShell";
 import AdminProductsPage from "../../pages/AdminProductsPage";
 import type { PageResult, Product } from "../../api/types";
 import { serverQuery, serverRequest } from "../../request/server";
@@ -12,7 +13,9 @@ export default async function AdminProductsRoute() {
   );
   return (
     <AdminGate>
-      <AdminProductsPage initialProducts={page?.items} />
+      <AdminWorkspaceShell>
+        <AdminProductsPage initialProducts={page?.items} />
+      </AdminWorkspaceShell>
     </AdminGate>
   );
 }

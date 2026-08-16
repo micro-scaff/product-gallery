@@ -78,6 +78,7 @@ func Register(r *gin.Engine, app *controllers.AppContext) {
 			client.PATCH("/profile", users.UpdateProfile)
 			client.POST("/profile/change-password", users.ChangePassword)
 			client.POST("/products/:id/chat", chats.CreateForProduct)
+			client.POST("/products/:id/chat/messages", chats.SendForProduct)
 			client.GET("/chats/:id", chats.Detail)
 			client.POST("/flow-talk/token", auth.FlowTalkToken)
 			client.POST("/uploads", uploads.Upload)

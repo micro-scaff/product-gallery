@@ -6,14 +6,13 @@ import {
   Empty,
   Flex,
   Input,
-  List,
   Space,
   Splitter,
   Tag,
   Typography,
 } from "antd";
 import { CommentOutlined, MobileOutlined, SendOutlined } from "@ant-design/icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   authApi,
   type ChatBinding,
@@ -23,7 +22,6 @@ import {
   type FlowTalkLoginResult,
   type FlowTalkMessage,
 } from "../api";
-import { sampleChats } from "./mock";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 type FlowTalkRuntime = {
@@ -35,16 +33,22 @@ type FlowTalkRuntime = {
   conversation: FlowTalkConversation;
 };
 
+type SyncOptions = {
+  notify?: boolean;
+};
+
 // AdminChatsPage combines Product Gallery business bindings with the temporary
 // Flow Talk demo-provider HTTP bridge.
 export default function AdminChatsPage() {
   const { message } = App.useApp();
-  const [chats, setChats] = useState<ChatBinding[]>(sampleChats);
-  const [selectedId, setSelectedId] = useState(sampleChats[0]?.id);
+  const [chats, setChats] = useState<ChatBinding[]>([]);
+  const [selectedId, setSelectedId] = useState<string | undefined>();
   const [draft, setDraft] = useState("");
   const [flowTalk, setFlowTalk] = useState<FlowTalkRuntime | null>(null);
   const [flowMessages, setFlowMessages] = useState<FlowTalkMessage[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
+  const messageStreamRef = useRef<HTMLDivElement | null>(null);
 
   const selected = useMemo(
     // If the selected id disappears after refresh, keep the UI stable by
@@ -52,16 +56,23 @@ export default function AdminChatsPage() {
     () => chats.find((chat) => chat.id === selectedId) ?? chats[0],
     [chats, selectedId],
   );
+  const orderedFlowMessages = useMemo(
+    () => normalizeFlowTalkMessages(flowMessages),
+    [flowMessages],
+  );
 
-  // Load Product Gallery chat bindings; if the business API is unavailable,
-  // sample data keeps the workspace renderable for UI review.
-  async function loadChats() {
+  // Load Product Gallery chat bindings from the real business API.
+  async function loadChats({ notify = false }: SyncOptions = {}) {
     try {
       const page = await chatsApi.list();
-      setChats(page.items.length > 0 ? page.items : sampleChats);
-      setSelectedId(page.items[0]?.id ?? sampleChats[0]?.id);
+      setChats(page.items);
+      setSelectedId(page.items[0]?.id);
+      return page.items;
     } catch {
-      message.info("后端未启动，聊天工作台展示本地示例会话。");
+      if (notify) {
+        message.info("后端未启动，暂无会话数据。");
+      }
+      return [];
     }
   }
 
@@ -69,17 +80,27 @@ export default function AdminChatsPage() {
   // 1. Product Gallery signs a stable external token.
   // 2. Flow Talk demo provider exchanges it for a Flow Talk JWT.
   // 3. A second demo peer is created so the admin can open a direct chat.
-  async function setupFlowTalk() {
+  async function setupFlowTalk(chat: ChatBinding | undefined, { notify = false }: SyncOptions = {}) {
+    if (!chat?.visitor_device_id) {
+      setFlowTalk(null);
+      setFlowMessages([]);
+      if (notify) {
+        message.warning("当前会话缺少游客设备，无法连接 Flow Talk。");
+      }
+      return;
+    }
     setSyncing(true);
     try {
       const ticket = await authApi.adminFlowTalkToken();
-      const baseURL = ticket.base_url || "http://127.0.0.1:8080";
+      const visitorTicket = await authApi.clientFlowTalkToken(chat.visitor_device_id);
+      const baseURL = visitorTicket.base_url || ticket.base_url || "http://127.0.0.1:8080";
       const admin = await flowTalkApi.externalLogin(baseURL, ticket.provider, ticket.token);
-      // demo_peer_access_token simulates a C-end customer during local联调.
+      // The C-end popup sends messages as this visitor identity. Connecting to
+      // the same Flow Talk user lets B-end read the real message stream.
       const peer = await flowTalkApi.externalLogin(
         baseURL,
-        ticket.provider,
-        ticket.demo_peer_access_token || "product-gallery-demo-client",
+        visitorTicket.provider,
+        visitorTicket.token,
       );
       const conversation = await flowTalkApi.createDirectConversation(
         baseURL,
@@ -90,18 +111,36 @@ export default function AdminChatsPage() {
       // than a browser-only local transcript.
       const page = await flowTalkApi.listMessages(baseURL, admin.token, conversation.id);
       setFlowTalk({ baseURL, admin, peer, conversation });
-      setFlowMessages(page.items);
-      message.success("Flow Talk 临时联调已连接");
+      setFlowMessages(normalizeFlowTalkMessages(page.items));
+      if (notify) {
+        message.success("Flow Talk 临时联调已连接");
+      }
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "Flow Talk 联调失败");
+      if (notify) {
+        message.error(error instanceof Error ? error.message : "Flow Talk 联调失败");
+      }
     } finally {
       setSyncing(false);
     }
   }
 
-  async function syncAll() {
-    await loadChats();
-    await setupFlowTalk();
+  async function syncAll(options: SyncOptions = {}) {
+    if (syncingRef.current) {
+      return;
+    }
+    syncingRef.current = true;
+    try {
+      const items = await loadChats(options);
+      const chat = items.find((item) => item.id === selectedId) ?? items[0];
+      await setupFlowTalk(chat, options);
+    } finally {
+      syncingRef.current = false;
+    }
+  }
+
+  async function openChat(chat: ChatBinding) {
+    setSelectedId(chat.id);
+    await setupFlowTalk(chat, { notify: false });
   }
 
   // sendMessage writes to Flow Talk and only mutates the local stream after the
@@ -123,8 +162,7 @@ export default function AdminChatsPage() {
         flowTalk.conversation.id,
         text,
       );
-      setFlowMessages((prev) => [...prev, sent]);
-      message.success("消息已发送到 Flow Talk");
+      setFlowMessages((prev) => normalizeFlowTalkMessages([...prev, sent]));
     } catch (error) {
       setDraft(text);
       message.error(error instanceof Error ? error.message : "发送失败");
@@ -134,11 +172,38 @@ export default function AdminChatsPage() {
   useEffect(() => {
     // The chat workspace bootstraps Product Gallery bindings and the temporary
     // Flow Talk demo conversation once after hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void syncAll();
+    void syncAll({ notify: false });
     // 聊天页进入时同步业务会话，并建立 demo provider 的 Flow Talk 临时单聊。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!flowTalk) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void flowTalkApi
+        .listMessages(flowTalk.baseURL, flowTalk.admin.token, flowTalk.conversation.id)
+        .then((page) => setFlowMessages(normalizeFlowTalkMessages(page.items)))
+        .catch(() => {
+          // Polling is intentionally quiet; the manual sync button is still the
+          // visible recovery action when local Flow Talk is unavailable.
+        });
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [flowTalk]);
+
+  useEffect(() => {
+    if (!selected) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      if (messageStreamRef.current) {
+        messageStreamRef.current.scrollTop = messageStreamRef.current.scrollHeight;
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected, orderedFlowMessages]);
 
   return (
     <main className="workspace chat-workspace">
@@ -146,33 +211,42 @@ export default function AdminChatsPage() {
         title="聊天工作台"
         description="PC 与手机浏览器共用一套路由页面处理商品咨询会话。"
         action={
-          <Button icon={<MobileOutlined />} loading={syncing} onClick={syncAll}>
+          <Button
+            icon={<MobileOutlined />}
+            loading={syncing}
+            onClick={() => void syncAll({ notify: true })}
+          >
             同步 Flow Talk
           </Button>
         }
       />
       <Splitter className="chat-shell">
         <Splitter.Panel defaultSize="34%" min="260px">
-          <List
-            dataSource={chats}
-            locale={{ emptyText: <Empty description="暂无会话" /> }}
-            renderItem={(item) => (
-              <List.Item
-                className={item.id === selected?.id ? "chat-row active" : "chat-row"}
-                onClick={() => setSelectedId(item.id)}
-              >
-                <List.Item.Meta
-                  avatar={<CommentOutlined />}
-                  title={item.product_title_snapshot}
-                  description={
-                    flowTalk
-                      ? `${item.status} · Flow Talk #${flowTalk.conversation.id}`
-                      : `${item.status} · ${item.flow_talk_conversation_id}`
-                  }
-                />
-              </List.Item>
-            )}
-          />
+          {chats.length === 0 ? (
+            <Empty className="empty-panel" description="暂无会话" />
+          ) : (
+            <ul className="plain-list chat-list">
+              {chats.map((item) => (
+                <li
+                  key={item.id}
+                  className={item.id === selected?.id ? "chat-row active entity-row" : "chat-row entity-row"}
+                  onClick={() => void openChat(item)}
+                >
+                  <div className="entity-meta">
+                    <CommentOutlined className="entity-icon" />
+                    <div className="entity-copy">
+                      <Typography.Text strong>{item.product_title_snapshot}</Typography.Text>
+                      <Typography.Text type="secondary">
+                        {flowTalk
+                          ? `${item.status} · Flow Talk #${flowTalk.conversation.id}`
+                          : `${item.status} · ${item.flow_talk_conversation_id}`}
+                      </Typography.Text>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Splitter.Panel>
         <Splitter.Panel>
           {selected ? (
@@ -188,9 +262,9 @@ export default function AdminChatsPage() {
                 </div>
                 <Tag color="processing">{selected.status}</Tag>
               </Flex>
-              <div className="message-stream">
-                {flowMessages.length > 0 ? (
-                  flowMessages.map((item) => (
+              <div className="message-stream" ref={messageStreamRef}>
+                {orderedFlowMessages.length > 0 ? (
+                  orderedFlowMessages.map((item) => (
                     <div
                       key={item.id}
                       className={
@@ -228,4 +302,12 @@ export default function AdminChatsPage() {
       </Splitter>
     </main>
   );
+}
+
+function normalizeFlowTalkMessages(messages: FlowTalkMessage[]) {
+  const byID = new Map<number, FlowTalkMessage>();
+  messages.forEach((item) => {
+    byID.set(Number(item.id), item);
+  });
+  return Array.from(byID.values()).sort((a, b) => Number(a.id) - Number(b.id));
 }

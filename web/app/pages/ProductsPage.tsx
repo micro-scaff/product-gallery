@@ -3,7 +3,7 @@
 import {
   App,
   Button,
-  List,
+  Empty,
   Space,
   Tag,
   Typography,
@@ -13,31 +13,25 @@ import Link from "next/link";
 import { useState } from "react";
 import { clientProductsApi, type Product } from "../api";
 import { money } from "./format";
-import { sampleProducts } from "./mock";
 
 // ProductsPage is the default C-end route. It intentionally shows only a list;
 // product details live at /products/[id].
 export default function ProductsPage({
-  initialProducts = sampleProducts,
+  initialProducts = [],
 }: {
   initialProducts?: Product[];
 }) {
   const { message } = App.useApp();
-  const [products, setProducts] = useState<Product[]>(
-    initialProducts.length > 0 ? initialProducts : sampleProducts,
-  );
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [loading, setLoading] = useState(false);
 
   async function loadProducts() {
     setLoading(true);
     try {
       const page = await clientProductsApi.list();
-      if (page.items.length > 0) {
-        // Preserve sample data when the fresh database has no published products.
-        setProducts(page.items);
-      }
+      setProducts(page.items);
     } catch (error) {
-      message.info(error instanceof Error ? error.message : "后端未启动，当前展示本地示例商品。");
+      message.info(error instanceof Error ? error.message : "后端未启动，暂无商品数据。");
     } finally {
       setLoading(false);
     }
@@ -64,39 +58,42 @@ export default function ProductsPage({
           className="hero-image"
           role="img"
           aria-label="商品目录封面"
-          style={{ backgroundImage: `url(${products[0]?.cover_url})` }}
+          style={{ backgroundImage: products[0]?.cover_url ? `url(${products[0].cover_url})` : undefined }}
         />
       </section>
 
       <section className="product-list-only">
         <Typography.Title level={4}>已上架商品</Typography.Title>
-        <List
-          dataSource={products}
-          renderItem={(item) => (
-            <List.Item
-              className="product-row"
-              actions={[
-                <Link key="detail" href={`/products/${item.id}`} className="row-link">
-                  查看详情 <ArrowRightOutlined />
-                </Link>,
-              ]}
-            >
-              <List.Item.Meta
-                avatar={
+        {products.length === 0 ? (
+          <Empty description="暂无已上架商品" />
+        ) : (
+          <ul className="plain-list">
+            {products.map((item) => (
+              <li key={item.id} className="product-row entity-row">
+                <div className="entity-meta">
                   <span
                     className="thumb"
                     role="img"
                     aria-label={item.title}
                     style={{ backgroundImage: `url(${item.cover_url})` }}
                   />
-                }
-                title={<Link href={`/products/${item.id}`}>{item.title}</Link>}
-                description={`${item.summary} · ${money(item.price)}`}
-              />
-              <Tag>{item.status}</Tag>
-            </List.Item>
-          )}
-        />
+                  <div className="entity-copy">
+                    <Link href={`/products/${item.id}`}>{item.title}</Link>
+                    <Typography.Text type="secondary">
+                      {item.summary} · {money(item.price)}
+                    </Typography.Text>
+                  </div>
+                </div>
+                <div className="entity-actions">
+                  <Tag>{item.status}</Tag>
+                  <Link href={`/products/${item.id}`} className="row-link">
+                    查看详情 <ArrowRightOutlined />
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </main>
   );

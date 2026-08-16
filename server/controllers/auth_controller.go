@@ -35,6 +35,12 @@ type userLoginRequest struct {
 	DeviceFingerprint string `json:"device_fingerprint"`
 }
 
+// flowTalkTokenRequest allows anonymous C-end visitors to get a stable demo
+// token based on their browser/device fingerprint during local Flow Talk联调.
+type flowTalkTokenRequest struct {
+	VisitorDeviceID string `json:"visitor_device_id"`
+}
+
 // Captcha returns a base64 image captcha for the C-end login page.
 func (ctl *AuthController) Captcha(c *gin.Context) {
 	id, image, err := utils.MakeCaptcha()
@@ -130,6 +136,19 @@ func (ctl *AuthController) ClientLogout(c *gin.Context) {
 // Product Gallery identity for a Flow Talk JWT. In the temporary local plan the
 // provider is "demo" and the Flow Talk server trusts any stable non-empty token.
 func (ctl *AuthController) FlowTalkToken(c *gin.Context) {
+	var req flowTalkTokenRequest
+	_ = c.ShouldBindJSON(&req)
+	if strings.TrimSpace(req.VisitorDeviceID) != "" {
+		utils.OK(c, gin.H{
+			"provider": ctl.app.Config.FlowTalk.Provider,
+			"token":    flowTalkVisitorAccessToken(req.VisitorDeviceID),
+			"actor":    req.VisitorDeviceID,
+			"type":     "visitor",
+			"base_url": ctl.app.Config.FlowTalk.BaseURL,
+		})
+		return
+	}
+
 	session, ok := ctl.sessionFromHeader(c)
 	if !ok {
 		utils.Fail(c, http.StatusUnauthorized, "UNAUTHORIZED", "未登录")
@@ -174,5 +193,14 @@ func flowTalkAccessToken(session services.Session) string {
 	parts := []string{"pg", session.ActorType, session.ActorID}
 	token := strings.Join(parts, "-")
 	replacer := strings.NewReplacer(":", "-", " ", "-", "_", "-")
+	return replacer.Replace(token)
+}
+
+// flowTalkVisitorAccessToken maps an anonymous browser/device to a stable Flow
+// Talk demo identity. The output must stay short because the demo provider maps
+// it into Flow Talk's username column.
+func flowTalkVisitorAccessToken(visitorDeviceID string) string {
+	token := "pg-visitor-" + strings.TrimSpace(visitorDeviceID)
+	replacer := strings.NewReplacer(":", "-", " ", "-", "_", "-", "@", "-")
 	return replacer.Replace(token)
 }

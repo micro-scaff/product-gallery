@@ -7,6 +7,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Result,
   Space,
   Tag,
   Typography,
@@ -14,8 +15,10 @@ import {
 } from "antd";
 import {
   ArrowLeftOutlined,
+  CheckCircleOutlined,
   CloudUploadOutlined,
   SaveOutlined,
+  StopOutlined,
 } from "@ant-design/icons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -26,12 +29,10 @@ import {
 } from "../api";
 import { MarkdownEditorField, MarkdownPreviewBox } from "../components/MarkdownEditorField";
 import { money } from "./format";
-import { sampleProducts } from "./mock";
 
 // AdminProductDetailPage is the editable route-level detail page. The list page
 // deliberately stays list-only and links here for real editing work.
 export default function AdminProductDetailPage({
-  productId,
   initialProduct,
 }: {
   productId: string;
@@ -39,15 +40,17 @@ export default function AdminProductDetailPage({
 }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<ProductPayload>();
-  const [product, setProduct] = useState<Product>(
-    initialProduct ?? sampleProducts.find((item) => item.id === productId) ?? sampleProducts[0],
-  );
+  const [product, setProduct] = useState<Product | null>(initialProduct ?? null);
   const [saving, setSaving] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(false);
   const watchedDetail = Form.useWatch("detail_md", form);
 
   // save sends only editable ProductPayload fields and then refreshes both the
   // preview pane and form values from the backend response.
   async function save(values: ProductPayload) {
+    if (!product) {
+      return;
+    }
     setSaving(true);
     try {
       const updated = await adminProductsApi.update(product.id, values);
@@ -61,12 +64,53 @@ export default function AdminProductDetailPage({
     }
   }
 
+  // The C-end product list only reads published products. Keeping this control
+  // on the detail page makes it clear when an edited draft becomes visible.
+  async function changeStatus(status: "published" | "offline") {
+    if (!product) {
+      return;
+    }
+    setStatusChanging(true);
+    try {
+      if (status === "published") {
+        await adminProductsApi.publish(product.id);
+      } else {
+        await adminProductsApi.offline(product.id);
+      }
+      setProduct((prev) => (prev ? { ...prev, status } : prev));
+      message.success(status === "published" ? "商品已上架，C 端可见" : "商品已下架，C 端不可见");
+    } catch {
+      message.error("状态更新失败，请确认后端服务已启动。");
+    } finally {
+      setStatusChanging(false);
+    }
+  }
+
   useEffect(() => {
     // Ant Design Form reads initialValues only on first mount. When a dynamic
     // route is rendered with server-provided initialProduct, mirror it into the
     // form after hydration so the editor and preview stay aligned.
-    form.setFieldsValue(productToFormValues(product));
+    if (product) {
+      form.setFieldsValue(productToFormValues(product));
+    }
   }, [form, product]);
+
+  if (!product) {
+    return (
+      <main className="workspace">
+        <Result
+          status="404"
+          title="商品不存在"
+          subTitle="请返回商品列表选择一个真实商品。"
+          extra={
+            <Link href="/admin/products">
+              <Button type="primary">返回商品列表</Button>
+            </Link>
+          }
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="workspace product-admin-detail">
@@ -77,6 +121,25 @@ export default function AdminProductDetailPage({
         <Space>
           <Tag>{product.status}</Tag>
           <Typography.Text type="secondary">{money(product.price)}</Typography.Text>
+          {product.status === "published" ? (
+            <Button
+              danger
+              icon={<StopOutlined />}
+              loading={statusChanging}
+              onClick={() => void changeStatus("offline")}
+            >
+              下架
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              loading={statusChanging}
+              onClick={() => void changeStatus("published")}
+            >
+              上架到 C 端
+            </Button>
+          )}
         </Space>
       </section>
 

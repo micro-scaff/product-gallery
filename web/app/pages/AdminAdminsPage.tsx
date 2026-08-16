@@ -1,33 +1,28 @@
 "use client";
 
-import { App, Button, Form, Input, List, Modal, Space, Tag, Typography } from "antd";
+import { App, Button, Empty, Form, Input, Modal, Space, Tag, Typography } from "antd";
 import { PlusOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { adminsApi, type Admin } from "../api";
-import { sampleAdmins } from "./mock";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
 // AdminAdminsPage is only reachable to super_admin through AdminGate.
 export default function AdminAdminsPage({
-  initialAdmins = sampleAdmins,
+  initialAdmins = [],
 }: {
   initialAdmins?: Admin[];
 }) {
   const { message } = App.useApp();
-  const [admins, setAdmins] = useState<Admin[]>(
-    initialAdmins.length > 0 ? initialAdmins : sampleAdmins,
-  );
+  const [admins, setAdmins] = useState<Admin[]>(initialAdmins);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm<{ username: string; password: string }>();
 
   async function refresh() {
     try {
       const page = await adminsApi.list();
-      // Empty database tables fall back to samples so first-run UI remains easy
-      // to inspect before real data is added.
-      setAdmins(page.items.length > 0 ? page.items : sampleAdmins);
+      setAdmins(page.items);
     } catch {
-      message.info("后端未启动，管理员管理展示本地示例数据。");
+      message.info("后端未启动，暂无管理员数据。");
     }
   }
 
@@ -62,18 +57,26 @@ export default function AdminAdminsPage({
       />
       <section className="table-panel">
         <Typography.Title level={5}>管理员列表</Typography.Title>
-        <List
-          dataSource={admins}
-          renderItem={(item) => (
-            <List.Item actions={[<Tag key={item.status}>{item.status}</Tag>]}>
-              <List.Item.Meta
-                avatar={<UserOutlined />}
-                title={item.username}
-                description={`${item.role} · ${item.id}`}
-              />
-            </List.Item>
-          )}
-        />
+        {admins.length === 0 ? (
+          <Empty description="暂无管理员" />
+        ) : (
+          <ul className="plain-list">
+            {admins.map((item) => (
+              <li key={item.id} className="entity-row">
+                <div className="entity-meta">
+                  <UserOutlined className="entity-icon" />
+                  <div className="entity-copy">
+                    <Typography.Text strong>{item.username}</Typography.Text>
+                    <Typography.Text type="secondary">
+                      {item.role} · {item.id}
+                    </Typography.Text>
+                  </div>
+                </div>
+                <Tag>{item.status}</Tag>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <Modal
         title="创建管理员"
